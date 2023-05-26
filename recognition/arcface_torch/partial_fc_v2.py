@@ -156,11 +156,12 @@ class PartialFC_V2(torch.nn.Module):
         labels = labels.view(-1, 1)
         demo_labels = demo_labels.view(-1, 1)
 
-        #index_positive = (self.class_start <= labels) & (
-        #        labels < self.class_start + self.num_local
-        #)
 
-        index_positive = labels[demo_labels == self.rank]
+        index_positive = (self.class_start <= labels) & (
+                labels < self.class_start + self.num_local
+        )
+
+        index_positive = demo_labels == self.rank
 
         labels[~index_positive] = -1
         labels[index_positive] -= self.class_start

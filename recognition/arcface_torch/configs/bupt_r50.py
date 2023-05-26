@@ -20,7 +20,7 @@ config.sample_rate = 1
 config.interclass_filtering_threshold = 0
 
 config.fp16 = False
-config.batch_size = 32
+config.batch_size = 128
 
 # For SGD 
 config.optimizer = "sgd"
@@ -61,9 +61,9 @@ config.wandb_resume = False # resume wandb run: Only if the you wand t resume th
 
 
 
-config.rec = "/home/atzori/Desktop/RFW"
-config.num_classes = 11429
-config.num_image = 36064
+config.rec = "/home/atzori/Desktop/Equalizedface"
+config.num_classes = 28000
+config.num_image = 1251430
 config.warmup_epoch = 0
 config.val_targets = ['lfw', 'cfp_fp', "agedb_30"]
 config.num_epoch = 50
