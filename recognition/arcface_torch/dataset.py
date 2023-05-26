@@ -150,7 +150,7 @@ class MXFaceDataset(Dataset):
         self.imgrec = mx.recordio.MXIndexedRecordIO(path_imgidx, path_imgrec, 'r')
         s = self.imgrec.read_idx(0)
         header, _ = mx.recordio.unpack(s)
-        if header.flag > 0:
+        if header.flag == 0:
             self.header0 = (int(header.label[0]), int(header.label[1]))
             self.imgidx = np.array(range(1, int(header.label[0])))
         else:
@@ -161,12 +161,14 @@ class MXFaceDataset(Dataset):
         s = self.imgrec.read_idx(idx)
         header, img = mx.recordio.unpack(s)
         label = header.label
-        if not isinstance(label, numbers.Number):
-            label = label[0]
+        #if not isinstance(label, numbers.Number) or not isinstance(label, np.ndarray):
+        #    label = label[0]
         label = torch.tensor(label, dtype=torch.long)
         sample = mx.image.imdecode(img).asnumpy()
         if self.transform is not None:
             sample = self.transform(sample)
+        if label.shape[0] == 2:
+            return sample, torch.tensor(int(label[0])), torch.tensor(int(label[1]))
         return sample, label
 
     def __len__(self):

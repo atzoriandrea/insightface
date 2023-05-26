@@ -2,7 +2,7 @@ import argparse
 import logging
 import os
 from datetime import datetime
-
+from install_pdb_handler import install_pdb_handler
 import numpy as np
 import torch
 from backbones import get_model
@@ -22,6 +22,7 @@ from torch.distributed.algorithms.ddp_comm_hooks.default_hooks import fp16_compr
 assert torch.__version__ >= "1.12.0", "In order to enjoy the features of the new torch, \
 we have upgraded the torch to 1.12.0. torch before than 1.12.0 may not work in the future."
 
+install_pdb_handler()
 try:
     rank = int(os.environ["RANK"])
     local_rank = int(os.environ["LOCAL_RANK"])
@@ -40,7 +41,6 @@ except KeyError:
 
 
 def main(args):
-
     # get config
     cfg = get_config(args.config)
     # global control random seed
@@ -56,7 +56,7 @@ def main(args):
         if rank == 0
         else None
     )
-    
+
     wandb_logger = None
     if cfg.using_wandb:
         import wandb
@@ -71,12 +71,12 @@ def main(args):
         run_name = run_name if cfg.suffix_run_name is None else run_name + f"_{cfg.suffix_run_name}"
         try:
             wandb_logger = wandb.init(
-                entity = cfg.wandb_entity, 
-                project = cfg.wandb_project, 
-                sync_tensorboard = True,
+                entity=cfg.wandb_entity,
+                project=cfg.wandb_project,
+                sync_tensorboard=True,
                 resume=cfg.wandb_resume,
-                name = run_name, 
-                notes = cfg.notes) if rank == 0 or cfg.wandb_log_all else None
+                name=run_name,
+                notes=cfg.notes) if rank == 0 or cfg.wandb_log_all else None
             if wandb_logger:
                 wandb_logger.config.update(cfg)
         except Exception as e:
@@ -159,14 +159,14 @@ def main(args):
         logging.info(": " + key + " " * num_space + str(value))
 
     callback_verification = CallBackVerification(
-        val_targets=cfg.val_targets, rec_prefix=cfg.rec, 
-        summary_writer=summary_writer, wandb_logger = wandb_logger
+        val_targets=cfg.val_targets, rec_prefix=cfg.rec,
+        summary_writer=summary_writer, wandb_logger=wandb_logger
     )
     callback_logging = CallBackLogging(
         frequent=cfg.frequent,
         total_step=cfg.total_step,
         batch_size=cfg.batch_size,
-        start_step = global_step,
+        start_step=global_step,
         writer=summary_writer
     )
 
@@ -177,10 +177,13 @@ def main(args):
 
         if isinstance(train_loader, DataLoader):
             train_loader.sampler.set_epoch(epoch)
-        for _, (img, local_labels) in enumerate(train_loader):
+        for _, (img, local_labels, ethnicity_labels) in enumerate(train_loader):
+            # if local_labels.shape[0] == 2:
+            #    ethnicity_labels = local_labels[1]
+            #    local_labels = local_labels[0]
             global_step += 1
             local_embeddings = backbone(img)
-            loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels)
+            loss: torch.Tensor = module_partial_fc(local_embeddings, local_labels, ethnicity_labels)
 
             if cfg.fp16:
                 amp.scale(loss).backward()
@@ -206,7 +209,7 @@ def main(args):
                         'Process/Step': global_step,
                         'Process/Epoch': epoch
                     })
-                    
+
                 loss_am.update(loss.item(), 1)
                 callback_logging(global_step, loss_am, epoch, cfg.fp16, lr_scheduler.get_last_lr()[0], amp)
 
@@ -233,20 +236,19 @@ def main(args):
                 model = wandb.Artifact(artifact_name, type='model')
                 model.add_file(path_module)
                 wandb_logger.log_artifact(model)
-                
+
         if cfg.dali:
             train_loader.reset()
 
     if rank == 0:
         path_module = os.path.join(cfg.output, "model.pt")
         torch.save(backbone.module.state_dict(), path_module)
-        
+
         if wandb_logger and cfg.save_artifacts:
             artifact_name = f"{run_name}_Final"
             model = wandb.Artifact(artifact_name, type='model')
             model.add_file(path_module)
             wandb_logger.log_artifact(model)
-
 
 
 if __name__ == "__main__":

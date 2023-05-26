@@ -1,10 +1,10 @@
-
 import math
-from typing import Callable
+from typing import Callable, Optional
 
 import torch
 from torch import distributed
 from torch.nn.functional import linear, normalize
+from install_pdb_handler import install_pdb_handler
 
 
 class PartialFC_V2(torch.nn.Module):
@@ -29,12 +29,12 @@ class PartialFC_V2(torch.nn.Module):
     _version = 2
 
     def __init__(
-        self,
-        margin_loss: Callable,
-        embedding_size: int,
-        num_classes: int,
-        sample_rate: float = 1.0,
-        fp16: bool = False,
+            self,
+            margin_loss: Callable,
+            embedding_size: int,
+            num_classes: int,
+            sample_rate: float = 1.0,
+            fp16: bool = False,
     ):
         """
         Paramenters:
@@ -50,6 +50,8 @@ class PartialFC_V2(torch.nn.Module):
         assert (
             distributed.is_initialized()
         ), "must initialize distributed before create this"
+        install_pdb_handler()
+
         self.rank = distributed.get_rank()
         self.world_size = distributed.get_world_size()
 
@@ -104,9 +106,10 @@ class PartialFC_V2(torch.nn.Module):
         return self.weight[self.weight_index]
 
     def forward(
-        self,
-        local_embeddings: torch.Tensor,
-        local_labels: torch.Tensor,
+            self,
+            local_embeddings: torch.Tensor,
+            local_labels: torch.Tensor,
+            local_eth: torch.Tensor
     ):
         """
         Parameters:
@@ -133,19 +136,32 @@ class PartialFC_V2(torch.nn.Module):
             torch.zeros((batch_size, self.embedding_size)).cuda()
             for _ in range(self.world_size)
         ]
+
         _gather_labels = [
             torch.zeros(batch_size).long().cuda() for _ in range(self.world_size)
         ]
+
+        _gather_demo_labels = [
+            torch.zeros(batch_size).long().cuda() for _ in range(self.world_size)
+        ]
+
         _list_embeddings = AllGather(local_embeddings, *_gather_embeddings)
         distributed.all_gather(_gather_labels, local_labels)
+        distributed.all_gather(_gather_demo_labels, local_eth)
 
         embeddings = torch.cat(_list_embeddings)
         labels = torch.cat(_gather_labels)
+        demo_labels = torch.cat(_gather_demo_labels)
 
         labels = labels.view(-1, 1)
-        index_positive = (self.class_start <= labels) & (
-            labels < self.class_start + self.num_local
-        )
+        demo_labels = demo_labels.view(-1, 1)
+
+        #index_positive = (self.class_start <= labels) & (
+        #        labels < self.class_start + self.num_local
+        #)
+
+        index_positive = labels[demo_labels == self.rank]
+
         labels[~index_positive] = -1
         labels[index_positive] -= self.class_start
 

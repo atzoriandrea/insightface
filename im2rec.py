@@ -280,6 +280,7 @@ def write_worker(q_out, fname, working_dir):
                 print('time:', cur_time - pre_time, ' count:', count)
                 pre_time = cur_time
             count += 1
+    record.close()
 
 
 def parse_args():
